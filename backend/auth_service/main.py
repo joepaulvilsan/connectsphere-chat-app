@@ -16,5 +16,3 @@ app.include_router(users.router)
 def read_root():
     """A simple root endpoint to check if the service is running."""
     return {"message": "Welcome to the ConnectSphere in-memory Auth Service!"}
-
-
