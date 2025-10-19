@@ -1,4 +1,5 @@
 from sqlmodel import SQLModel, create_engine
+from sqlmodel import Session
 
 DATABASE_URL = "postgresql://postgres:mysecretpassword@localhost:5433/connectsphere_db"
 

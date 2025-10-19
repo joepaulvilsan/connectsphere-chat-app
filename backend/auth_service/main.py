@@ -1,13 +1,13 @@
 from fastapi import FastAPI
-from routers import authentication, users
-
+from backend.auth_service.routers import authentication, users
+from backend.db.database import create_db_and_tables
+create_db_and_tables()
 app = FastAPI(
     title="ConnectSphere Auth Service (In-Memory)",
     description="Handles user registration and login without a real database for Week 2."
 )
 
-app.state.fake_user_db = []
-app.state.user_id_counter = 0
+
 
 app.include_router(authentication.router)
 app.include_router(users.router)

@@ -5,8 +5,10 @@ from fastapi.security import OAuth2PasswordRequestForm
 from typing import Annotated
 from sqlmodel import Session
 from backend.db.database import get_db
+from sqlmodel import select
+from backend.models.user_models import User
 
-import schemas, hashing, jwt_token
+from .. import schemas, hashing, jwt_token
 
 router = APIRouter(
     tags=["Authentication"] 
@@ -33,7 +35,7 @@ async def login_for_access_token(
         )
 
     access_token = jwt_token.create_access_token(
-        data={"sub": str(db_user["id"])}
+        data={"sub": str(db_user.id)}
     )
     
     return schemas.Token(access_token=access_token, token_type="bearer")
