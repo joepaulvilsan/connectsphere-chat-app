@@ -112,10 +112,11 @@ pwd_context = CryptContext(
 ### 6. Fixed Route Parameter Mismatch
 
 **Problem:** In `user_service/routers/user_router.py`:
-- Path parameter was `user_id` but function parameter was `username`
-- This would cause 422 validation errors for all requests
+- Path parameter was `{user_id}` but function parameter was `username`
+- This mismatch would cause 422 validation errors for all requests
+- Inconsistent naming made the API confusing
 
-**Solution:** Aligned path and function parameters:
+**Solution:** Aligned both path and function parameters to use `user_email`:
 ```python
 @router.get("/get_user/{user_email}")
 async def get_user(user_email: str, db: Session = Depends(get_db)):
@@ -123,8 +124,9 @@ async def get_user(user_email: str, db: Session = Depends(get_db)):
 
 **Benefits:**
 - Route now works correctly
-- Clear naming convention (searching by email)
+- Clear, consistent naming convention (searching by email)
 - Eliminates validation errors
+- Better API clarity for consumers
 
 ## Performance Impact
 
@@ -160,7 +162,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES=60  # Longer tokens for development
 # .env file
 DB_ECHO=false               # Disable SQL logging
 BCRYPT_ROUNDS=14            # Stronger password hashing
-DATABASE_URL=postgresql://user:pass@db-host:5432/prod_db
+DATABASE_URL=postgresql://user:pass@db-host:5432/connectsphere_db
 SECRET_KEY=<strong-random-secret>
 ACCESS_TOKEN_EXPIRE_MINUTES=30  # Shorter tokens for security
 ```
@@ -173,7 +175,7 @@ To verify these improvements:
 
 2. **Performance Benchmark:** Compare response times before and after:
    ```bash
-   # Test login endpoint
+   # Test login endpoint (adjust endpoint path as needed for your application)
    ab -n 1000 -c 10 -p login.json -T application/json http://localhost:8000/login/
    ```
 
