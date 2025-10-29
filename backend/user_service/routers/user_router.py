@@ -7,9 +7,9 @@ router = APIRouter(
     prefix="/user",
     tags=["Users"]
 )
-@router.get("/get_user/{user_id}")
-async def get_user(username: str, db: Session = Depends(get_db)):
-    user = db.exec(select(User).where(User.email == username)).first()
+@router.get("/get_user/{user_email}")
+async def get_user(user_email: str, db: Session = Depends(get_db)):
+    user = db.exec(select(User).where(User.email == user_email)).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return {"user_id": user.id, "email": user.email}
