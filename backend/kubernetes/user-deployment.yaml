@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-deployment
+  labels:
+    app: user
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: user
+  template:
+    metadata:
+      labels: 
+        app: user
+    spec:
+      containers:
+        - name: user-container
+          image: user-service:latest
+          ports:
+            - containerPort: 8000
+          imagePullPolicy: Never  
+          env:
+            - name: DB_User
+              value: "postgres"
+            - name: DB_PASSWORD
+              value: "mysecretpassword"
+            - name: DB_HOST
+              value: "host.docker.internal"
+            - name: DB_PORT
+              value: "5433"
+            - name: DB_NAME
+              value: "connectsphere_db"

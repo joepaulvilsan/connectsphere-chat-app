@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-deployment
+  labels:
+    app: auth
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: auth
+  template:
+    metadata:
+      labels: 
+        app: auth
+    spec:
+      containers:
+        - name: auth-container
+          image: auth-service:latest
+          ports:
+            - containerPort: 8000
+          imagePullPolicy: Never  
+          env:
+            - name: JWT_SECRET_KEY
+              value: "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7"
+            - name: DB_USER
+              value: "posgres"
+            - name: DB_PASSWORD
+              value: "mysecretpassword"
+            - name: DB_HOST
+              value: "host.docker.internal"
+            - name: DB_PORT
+              value: "5433"
+            - name: DB_NAME
+              value: "connectsphere_db"
