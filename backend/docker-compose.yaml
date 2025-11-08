@@ -9,5 +9,13 @@ services:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "5433:5432"
+  cassandra_db:
+    image: cassandra:latest
+    container_name: cassandra_db
+    ports:
+      - "9042:9042"
+    volumes:
+      - cassandra_data:/var/lib/cassandra    
 volumes:
   postgres_data:
+  cassandra_data:
