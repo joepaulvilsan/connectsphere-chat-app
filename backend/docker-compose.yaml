@@ -16,6 +16,16 @@ services:
       - "9042:9042"
     volumes:
       - cassandra_data:/var/lib/cassandra    
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rrabbitmq_server
+    ports:
+      - "5672:5672"
+      - "15672:15672"    
+
+
+      
 volumes:
   postgres_data:
   cassandra_data:

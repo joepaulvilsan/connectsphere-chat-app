@@ -1,104 +1,86 @@
-import os  # <-- FIX 1: Added the missing import
+import os
+import json
+import aio_pika  # <-- Use the ASYNC library
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from .connection_manager import ConnectionManager
-from cassandra.cluster import Cluster, Session
-from cassandra.query import SimpleStatement
-import uuid
+# (All cassandra imports are gone)
 
-# Get Cassandra host from env var, default to 127.0.0.1 for local uvicorn
-CASSANDRA_HOST = os.getenv("CASSANDRA_HOST", "127.0.0.1")
+# --- App & RabbitMQ Connection ---
+app = FastAPI()
 
-app = FastAPI(
-    title="ConnectSphere Real-Time Service",
-    description="Manages WebSocket connections for real-time communication."
-)
+# Get host from .env, default to 'localhost' for local uvicorn
+RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "localhost") 
 
-# Global variables to hold the connection
-cluster: Cluster | None = None
-session: Session | None = None
+# These will hold the persistent connection and channel
+rabbitmq_connection: aio_pika.RobustConnection | None = None
+rabbitmq_channel: aio_pika.Channel | None = None
 
 
 @app.on_event("startup")
-async def startup_event():
-    """Initialize Cassandra connection on startup."""
-    global cluster, session
+async def on_startup():
+    """Connects to RabbitMQ when the app starts."""
+    global rabbitmq_connection, rabbitmq_channel
     try:
-        cluster = Cluster([CASSANDRA_HOST], port=9042)
-        session = cluster.connect()
-        print("Successfully connected to Cassandra!")
+        # 1. How to connect? (Use aio_pika's async connect)
+        rabbitmq_connection = await aio_pika.connect_robust(
+            f"amqp://guest:guest@{RABBITMQ_HOST}/"
+        )
         
-        # Create keyspace and table if they don't exist
-        session.execute("""
-            CREATE KEYSPACE IF NOT EXISTS chat_app_keyspace
-            WITH REPLICATION = { 
-              'class' : 'SimpleStrategy', 
-              'replication_factor' : 1 
-            }
-            """)
-        print("Keyspace 'chat_app_keyspace' is ready.")
-
-        session.set_keyspace('chat_app_keyspace')
-
-        session.execute("""
-            CREATE TABLE IF NOT EXISTS messages (
-                conversation_id text,
-                message_id timeuuid,
-                sender_id int,
-                text text,
-                PRIMARY KEY ((conversation_id), message_id)
-            ) WITH CLUSTERING ORDER BY (message_id ASC);
-            """)
-        print("Table 'messages' is ready.")
+        # 2. How to get a channel?
+        rabbitmq_channel = await rabbitmq_connection.channel()
+        
+        # 3. How to ensure the queue exists?
+        await rabbitmq_channel.declare_queue('message_queue')
+        
+        print("Real-Time Service: Connected to RabbitMQ!")
     except Exception as e:
-        print(f"FATAL: Could not connect to Cassandra: {e}")
-
+        print(f"FATAL: Real-Time Service could not connect to RabbitMQ: {e}")
 
 @app.on_event("shutdown")
-async def shutdown_event():
-    """Close Cassandra connection on shutdown."""
-    global cluster
-    if cluster:
-        cluster.shutdown()
-    print("Cassandra connection closed.")
+async def on_shutdown():
+    """Closes the RabbitMQ connection."""
+    if rabbitmq_channel:
+        await rabbitmq_channel.close()
+    if rabbitmq_connection:
+        await rabbitmq_connection.close()
+    print("Real-Time Service: RabbitMQ connection closed.")
 
-# Create a single instance of the manager
+
 manager = ConnectionManager()
 
-
 @app.websocket("/ws/{client_id}")
-async def websocket_endpoint(websocket: WebSocket, client_id: int): # Changed client_id to int for sender_id
-    """WebSocket endpoint for real-time communication."""
+async def websocket_endpoint(websocket: WebSocket, client_id: int):
     await manager.connect(websocket)
     try:
         while True:
-            # Wait for JSON data from the client
-            data = await websocket.receive_json()
+            data = await websocket.receive_json() # e.g., {"conversation_id": "...", "text": "..."}
             
-            # --- FIX 2: Added logic to save the message to Cassandra ---
-            if session:
+            # --- THIS IS THE BLOCK THAT REPLACES session.execute() ---
+            if rabbitmq_channel:
                 try:
-                    cql_query = """
-                    INSERT INTO messages (conversation_id, message_id, sender_id, text)
-                    VALUES (%s, now(), %s, %s)
-                    """
-                    # We use the client_id from the URL as the sender_id
-                    session.execute(cql_query, (
-                        data['conversation_id'], 
-                        client_id, 
-                        data['text']
-                    ))
+                    # 4. How to convert data? (Add client_id and convert to JSON string)
+                    message_to_send = {
+                        "conversation_id": data['conversation_id'],
+                        "sender_id": client_id,
+                        "text": data['text']
+                    }
+                    body = json.dumps(message_to_send).encode() # encode to bytes
+
+                    # 5. How to publish?
+                    await rabbitmq_channel.default_exchange.publish(
+                        aio_pika.Message(body=body),
+                        routing_key='message_queue' # 6. Routing key = queue name
+                    )
                 except Exception as e:
-                    # Log the error but don't disconnect the user
-                    print(f"Error saving message to Cassandra: {e}")
-            # --- End of Fix 2 ---
+                    print(f"Error publishing message: {e}")
+            # --- END OF BLOCK ---
 
-            # Broadcast the message to all other users
+            # Broadcast to other live clients
             await manager.broadcast(f"Client #{client_id} says: {data['text']}")
-
+            
     except WebSocketDisconnect:
         manager.disconnect(websocket)
         await manager.broadcast(f"Client #{client_id} disconnected")
     except Exception as e:
-        # Handle other potential errors (like bad JSON)
         print(f"An error occurred with client #{client_id}: {str(e)}")
         manager.disconnect(websocket)
